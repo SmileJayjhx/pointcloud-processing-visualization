@@ -15,7 +15,7 @@
 
 ```shell
 git clone https://github.com/SmileJayjhx/pointcloud-processing-visualization.git
-cd icp
+cd pointcloud-processing-visualization/icp
 cmake .
 make
 ./icp_example
