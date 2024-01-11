@@ -3,7 +3,7 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/common/transforms.h>
-#include <pcl/registration/icp.h>
+#include <pcl/registration/gicp.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/voxel_grid.h>
@@ -63,7 +63,7 @@ Eigen::Matrix4f generateCloseTransformation(const Eigen::Matrix4f &original) {
 int main() {
 	// 加载点云
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("/home/smile/ros/icp/test.pcd", *cloud_in) == -1) {
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("/home/smile/Desktop/github/src/pointcloud-processing-visualization/pcd/gicp.pcd", *cloud_in) == -1) {
 		PCL_ERROR("Couldn't read file test.pcd \n");
 		return -1;
 	}
@@ -83,7 +83,7 @@ int main() {
 	Eigen::Matrix4f base_transformation = generateRandomTransformation();
 	Eigen::Matrix4f base_transformation_prior = base_transformation;
 	std::cout << "Base Transformation Matrix:\n" << base_transformation << std::endl;
-	saveTransformation(base_transformation, "/home/smile/ros/icp/result.txt");
+	saveTransformation(base_transformation, "/home/smile/Desktop/github/src/pointcloud-processing-visualization/gicp/result.txt");
 
 	// 生成接近的变换作为先验位姿
 	Eigen::Matrix4f prior_pose = generateCloseTransformation(base_transformation);
@@ -92,124 +92,125 @@ int main() {
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::transformPointCloud(*cloud_filtered, *cloud_transformed, base_transformation);
 
-	// 设置ICP实例
-	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> saicp, icp_with_prior;
-	saicp.setInputSource(cloud_transformed);
-	saicp.setInputTarget(cloud_filtered);
-	saicp.setMaximumIterations(1); // 每次调用align时执行一次迭代
+	// 设置gicp实例
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> gicp, gicp_with_prior;
+	gicp.setInputSource(cloud_transformed);
+	gicp.setInputTarget(cloud_filtered);
+	gicp.setMaximumIterations(1); // 每次调用align时执行一次迭代
 
-	icp_with_prior.setInputSource(cloud_transformed);
-	icp_with_prior.setInputTarget(cloud_filtered);
-	icp_with_prior.setMaximumIterations(1);
+	gicp_with_prior.setInputSource(cloud_transformed);
+	gicp_with_prior.setInputTarget(cloud_filtered);
+	gicp_with_prior.setMaximumIterations(1);
 
 	// 初始化可视化
-	pcl::visualization::PCLVisualizer viewer("ICP demo");
+	pcl::visualization::PCLVisualizer viewer("gicp demo");
 	viewer.setBackgroundColor(0, 0, 0);
 	viewer.addPointCloud<pcl::PointXYZ>(cloud_filtered, "cloud_filtered");
 	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_filtered");
 	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "cloud_filtered");
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp_prior(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_gicp(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_gicp_prior(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
 
-	viewer.addPointCloud<pcl::PointXYZ>(cloud_icp, "cloud_icp");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_icp");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 1.0, 0.0, "cloud_icp");
+	viewer.addPointCloud<pcl::PointXYZ>(cloud_gicp, "cloud_gicp");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_gicp");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 1.0, 0.0, "cloud_gicp");
 
-	viewer.addPointCloud<pcl::PointXYZ>(cloud_icp_prior, "cloud_icp_prior");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_icp_prior");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.0, 1.0, "cloud_icp_prior");
+	viewer.addPointCloud<pcl::PointXYZ>(cloud_gicp_prior, "cloud_gicp_prior");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_gicp_prior");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.0, 1.0, "cloud_gicp_prior");
 
 	viewer.addCoordinateSystem(1.0);
 	viewer.initCameraParameters();
 
 	// 创建初始变换的矩阵, 其中无先验位姿的是一个单位阵
-	Eigen::Matrix4f icp_result = Eigen::Matrix4f::Identity();
+	Eigen::Matrix4f gicp_result = Eigen::Matrix4f::Identity();
 	// 先验的矩阵为之前生成的, 在实际变换的基础上添加了扰动的变换矩阵
-	Eigen::Matrix4f icp_result_prior = prior_pose;
+	Eigen::Matrix4f gicp_result_prior = prior_pose;
 
 	// 计数器
-	int icp_cnt = 0; // icp迭代次数
-	int icp_prior_cnt = 0; // 先验icp迭代次数
+	int gicp_cnt = 0; // gicp迭代次数
+	int gicp_prior_cnt = 0; // 先验gicp迭代次数
 
-	bool icp_fitness_reached = false; 
-	bool icp_prior_fitness_reached = false;
+	bool gicp_fitness_reached = false; 
+	bool gicp_prior_fitness_reached = false;
 
 	int iteration_counter = 0;  // 迭代频率计数器, 迭代的频率按照 10ms x iteration_counter 可以在下面的循环中修改
 
 	while (!viewer.wasStopped()) {
+
+		
 		viewer.spinOnce();  
 		// 图像化界面刷新频率10ms, 方便使用鼠标进行控制视角 
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		// 如果都完成了收敛, 则不再更新
-		if(icp_fitness_reached && icp_prior_fitness_reached) continue;
-		
-		// 创建icp之后的新点云
-		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp_it(new pcl::PointCloud<pcl::PointXYZ>);
-		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp_prior_it(new pcl::PointCloud<pcl::PointXYZ>);
+		if(gicp_fitness_reached && gicp_prior_fitness_reached) continue;
+		// 创建gicp之后的新点云
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_gicp_it(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_gicp_prior_it(new pcl::PointCloud<pcl::PointXYZ>);
 
-		// 每10ms x 100 = 1000ms = 1s 即每1秒做一次icp并更新点云
+		// 每10ms x 100 = 1000ms = 1s 即每1秒做一次gicp并更新点云
 		if (++iteration_counter >= 100) {
 
-			// 如果没有达到0.0001的分值, 则icp继续迭代
-			if(!icp_fitness_reached)
+			// 如果没有达到0.0001的分值, 则gicp继续迭代
+			if(!gicp_fitness_reached)
 			{
-				// 对普通ICP和带有先验位姿的ICP进行迭代
-				saicp.align(*cloud_icp_it,icp_result);
-				icp_result = saicp.getFinalTransformation();
+				// 对普通gicp和带有先验位姿的gicp进行迭代
+				gicp.align(*cloud_gicp_it,gicp_result);
+				gicp_result = gicp.getFinalTransformation();
 
 				// 检查是否收敛(肯定收敛, 因为最多迭代1次,所以每一次都会收敛)
-				if (saicp.hasConverged()) 
+				if (gicp.hasConverged()) 
 				{
-					double fitness_score = icp.getFitnessScore();
-					if(icp_fitness_reached) icp_cnt=icp_cnt;
-					else icp_cnt += 1;
-					std::cout << "[ICP] 分数为 " << fitness_score <<std::endl;
+					double fitness_score = gicp.getFitnessScore();
+					if(gicp_fitness_reached) gicp_cnt=gicp_cnt;
+					else gicp_cnt += 1;
+					std::cout << "[gicp] 分数为 " << fitness_score <<std::endl;
 
 					// 获取最新一次的变换, 并将该变换应用到带先验的点云上, 更新该点云
-					base_transformation = saicp.getFinalTransformation().cast<float>();
-					pcl::transformPointCloud(*cloud_transformed, *cloud_icp_it, base_transformation);
-					viewer.updatePointCloud<pcl::PointXYZ>(cloud_icp_it, "cloud_icp");
+					base_transformation = gicp.getFinalTransformation().cast<float>();
+					pcl::transformPointCloud(*cloud_transformed, *cloud_gicp_it, base_transformation);
+					viewer.updatePointCloud<pcl::PointXYZ>(cloud_gicp_it, "cloud_gicp");
 					//真正的停止条件(收敛条件)
 					if(fitness_score<=0.001)
 					{
-						icp_fitness_reached = true;
+						gicp_fitness_reached = true;
 						std::cout << "======================================================="<<std::endl;
-						std::cout << "[ICP]完成收敛 " <<std::endl;
-						std::cout << "[ICP]迭代次数为 " << icp_cnt <<std::endl;
-						std::cout << "[ICP]变换矩阵 " << std::endl;
-						std::cout << saicp.getFinalTransformation() << std::endl;
+						std::cout << "[gicp]完成收敛 " <<std::endl;
+						std::cout << "[gicp]迭代次数为 " << gicp_cnt <<std::endl;
+						std::cout << "[gicp]变换矩阵 " << std::endl;
+						std::cout << gicp.getFinalTransformation() << std::endl;
 						std::cout << "======================================================="<<std::endl;
 					}     
 				}
 			}       
-			if(!icp_prior_fitness_reached)
+			if(!gicp_prior_fitness_reached)
 			{
-				icp_with_prior.align(*cloud_icp_prior_it, icp_result_prior);
-				icp_result_prior = icp_with_prior.getFinalTransformation();
+				gicp_with_prior.align(*cloud_gicp_prior_it, gicp_result_prior);
+				gicp_result_prior = gicp_with_prior.getFinalTransformation();
 				// 同理, 这里并不是真正的停止条件
-				if (icp_with_prior.hasConverged()) 
+				if (gicp_with_prior.hasConverged()) 
 				{
-					double fitness_score_prior = icp_with_prior.getFitnessScore();
-					if(icp_prior_fitness_reached) icp_prior_cnt = icp_prior_cnt;
-					else icp_prior_cnt += 1;
-					std::cout << "[ICP+先验] 分数为 " << fitness_score_prior <<std::endl;
+					double fitness_score_prior = gicp_with_prior.getFitnessScore();
+					if(gicp_prior_fitness_reached) gicp_prior_cnt = gicp_prior_cnt;
+					else gicp_prior_cnt += 1;
+					std::cout << "[gicp+先验] 分数为 " << fitness_score_prior <<std::endl;
 
 					// 带先验的停止条件也是0.0001分以下终止
 					if(fitness_score_prior<=0.001)
 					{
-					icp_prior_fitness_reached = true;
+					gicp_prior_fitness_reached = true;
 					std::cout << "======================================================="<<std::endl;
-					std::cout << "[ICP+先验]完成收敛 " <<std::endl;
-					std::cout << "[ICP+先验]迭代次数为 " << icp_prior_cnt <<std::endl;
-					std::cout << "[ICP+先验]变换矩阵 " <<std::endl;
-					std::cout << icp_with_prior.getFinalTransformation() << std::endl;
+					std::cout << "[gicp+先验]完成收敛 " <<std::endl;
+					std::cout << "[gicp+先验]迭代次数为 " << gicp_prior_cnt <<std::endl;
+					std::cout << "[gicp+先验]变换矩阵 " <<std::endl;
+					std::cout << gicp_with_prior.getFinalTransformation() << std::endl;
 					std::cout << "======================================================="<<std::endl;
 					}
 					// 获取最新一次的变换, 并将该变换应用到带先验的点云上, 更新该点云
-					base_transformation_prior = icp_with_prior.getFinalTransformation().cast<float>();
-					pcl::transformPointCloud(*cloud_transformed, *cloud_icp_prior_it, base_transformation_prior);
-					viewer.updatePointCloud<pcl::PointXYZ>(cloud_icp_prior_it, "cloud_icp_prior"); 
+					base_transformation_prior = gicp_with_prior.getFinalTransformation().cast<float>();
+					pcl::transformPointCloud(*cloud_transformed, *cloud_gicp_prior_it, base_transformation_prior);
+					viewer.updatePointCloud<pcl::PointXYZ>(cloud_gicp_prior_it, "cloud_gicp_prior"); 
 				}
 			}
 			// 重置迭代计数器
