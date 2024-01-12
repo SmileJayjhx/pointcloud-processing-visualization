@@ -22,8 +22,8 @@ Eigen::Matrix4f generateAnnealingTransformation(double temperature) {
 
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     boost::random::mt19937 gen(seed);
-		double tras_scale = 0.1;
-		double rot_scale = 0.15* M_PI;
+		double tras_scale = 0.15;
+		double rot_scale = 0.17* M_PI;
     boost::random::uniform_real_distribution<> rand_dis(0, 1);
 		double randNum = ((double)rand() / RAND_MAX);
 		if (rand_dis(gen) > randNum && temperature<=0.1)
@@ -53,7 +53,7 @@ Eigen::Matrix4f generateAnnealingTransformation(double temperature) {
 Eigen::Matrix4f generateRandomTransformation() {
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 	boost::random::mt19937 gen(seed);  // 随机数生成器
-	boost::random::uniform_real_distribution<> dis(-20, 20);  // 位移范围
+	boost::random::uniform_real_distribution<> dis(-200, 200);  // 位移范围
 	boost::random::uniform_real_distribution<> angle_dis(-M_PI, M_PI);  // 旋转范围
 
 	Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
@@ -100,6 +100,55 @@ void saveTransformation(const Eigen::Matrix4f &transform, const std::string &fil
 	}
 }
 
+struct TransformationError {
+    float translationError;
+    Eigen::Vector3f rotationError; // 存储绕X轴、Y轴和Z轴的旋转误差
+};
+
+// 重载 << 运算符以打印 TransformationError
+std::ostream& operator<<(std::ostream& os, const TransformationError& error) {
+    os << "Translation Error: " << error.translationError << ", "
+       << "Rotation Error: [" << error.rotationError.transpose() << "]";
+    return os;
+}
+
+// 示例：计算两个变换矩阵之间的误差
+TransformationError CalculateTransformationError(const Eigen::Matrix4f &matrix1, const Eigen::Matrix4f &matrix2) {
+    TransformationError error;
+
+    // 计算平移误差
+    Eigen::Vector3f translation1 = matrix1.block<3,1>(0, 3);
+    Eigen::Vector3f translation2 = matrix2.block<3,1>(0, 3);
+    error.translationError = (translation2 - translation1).norm();
+
+    // 计算旋转误差
+    Eigen::Quaternionf quaternion1(matrix1.block<3,3>(0,0));
+    Eigen::Quaternionf quaternion2(matrix2.block<3,3>(0,0));
+    Eigen::Quaternionf deltaQuaternion = quaternion1.inverse() * quaternion2;
+    Eigen::Vector3f deltaEulerAngles = deltaQuaternion.toRotationMatrix().eulerAngles(0, 1, 2); // X, Y, Z
+    error.rotationError = deltaEulerAngles.cwiseAbs(); // 绝对值误差
+
+    return error;
+}
+Eigen::Matrix4f readMatrixFromFile(const std::string& filepath) {
+    std::ifstream file(filepath);
+    Eigen::Matrix4f matrix;
+
+    if (file.is_open()) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                if (!(file >> matrix(i, j))) {
+                    throw std::runtime_error("文件格式错误或数据不足以填充矩阵");
+                }
+            }
+        }
+        file.close();
+    } else {
+        throw std::runtime_error("无法打开文件: " + filepath);
+    }
+
+    return matrix;
+}
 // Eigen::Matrix4f generateCloseTransformation(const Eigen::Matrix4f &original) {
 // 	// 单位 [m]
 // 	Eigen::Matrix4f closeTransform = original;
@@ -123,8 +172,8 @@ int main() {
 
 	std::string directory = "/home/smile/Desktop/github/src/pointcloud-processing-visualization/pcd/";
 
-    // 使用函数选择一个随机文件
-    std::string file_to_load = selectRandomPCDFile(directory);
+	// 使用函数选择一个随机文件
+	std::string file_to_load = selectRandomPCDFile(directory);
 
 	// 加载点云
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>);
@@ -168,7 +217,7 @@ int main() {
 	Eigen::Matrix4f base_transformation = generateRandomTransformation();
 	Eigen::Matrix4f base_transformation_normal = base_transformation;
 	std::cout << "Base Transformation Matrix:\n" << base_transformation << std::endl;
-	saveTransformation(base_transformation, "/home/smile/ros/icp/result.txt");
+	saveTransformation(base_transformation, "/home/smile/Desktop/github/src/pointcloud-processing-visualization/saicp/result.txt");
 
 	// 生成接近的变换作为先验位姿
 	// Eigen::Matrix4f normal_pose = generateCloseTransformation(base_transformation);
@@ -229,7 +278,7 @@ int main() {
 		// 图像化界面刷新频率10ms, 方便使用鼠标进行控制视角 
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		// 如果都完成了收敛, 则不再更新
-		if((saicp_fitness_reached && normal_icp_fitness_reached) || (++stop_iteration_cnt >= 3000)) 
+		if((saicp_fitness_reached && normal_icp_fitness_reached) || (++stop_iteration_cnt >= 2000)) 
 		{
 			if(!has_published)
 			{
@@ -241,6 +290,17 @@ int main() {
 				std::cout << "分数差比率: " << std::abs((icp_score-icp_normal_score))/icp_normal_score <<std::endl;
 				std::cout << "差值接收率: " << double(bad_value_accetp_cnt)/double(saicp_cnt) <<std::endl;
 				has_published = true;
+				std::cout << "[SAICP]变换矩阵 " << std::endl;
+				std::cout << saicp.getFinalTransformation() << std::endl;
+				std::cout << "[SAICP]误差 " << std::endl;
+				Eigen::Matrix4f result = readMatrixFromFile("/home/smile/Desktop/github/src/pointcloud-processing-visualization/saicp/result.txt");
+				std::cout << CalculateTransformationError(saicp.getFinalTransformation(),result) <<std::endl;
+				std::cout << "-----------------------------------------------------------" << std::endl;
+				std::cout << "[ICP]变换矩阵 " <<std::endl;
+				std::cout << normal_icp.getFinalTransformation() << std::endl;
+				std::cout << "[ICP]误差 " << std::endl;
+				std::cout << CalculateTransformationError(normal_icp.getFinalTransformation(),result) <<std::endl;
+				std::cout << "-----------------------------------------------------------" << std::endl;
 			}
 			continue;
 		}
@@ -278,7 +338,7 @@ int main() {
 					{
 						bad_value_accetp_cnt++;	
 						// std::cout << "接受差值: "  << bad_value_accetp_cnt << std::endl;
-						saicp_result = new_icp_result; // 以一定概率接受较差的变换
+						saicp_result = perturbed_transformation; // 以一定概率接受较差的变换
 						last_fitness_score = new_fitness_score; // 更新fitness score，即使它变差了
 					}
 					// 更新温度
