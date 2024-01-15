@@ -101,9 +101,9 @@ void SimulatedAnnealingICP::align(pcl::PointCloud<pcl::PointXYZ>::Ptr &output_cl
 			viewer.updatePointCloud<pcl::PointXYZ>(tem_cloud, "saicp_icp");
 
 			temperature *= cooling_rate_;
-			std::cout << "current temp: " << temperature << std::endl;
+			// std::cout << "current temp: " << temperature << std::endl;
 		}
-		std::cout << "迭代次数: " << iteration_counter <<std::endl;
+		// std::cout << "迭代次数: " << iteration_counter <<std::endl;
 		iteration_counter++;
 		if (iteration_counter > max_iterations_ || last_fitness_score<0.0001) {
 			output_cloud = tem_cloud;
@@ -148,7 +148,7 @@ Eigen::Matrix4f SimulatedAnnealingICP::generateAnnealingTransformation(double te
 	boost::random::uniform_real_distribution<> angle_dis(-rot_scale * temperature, rot_scale * temperature);
 
 	Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
-	std::cout << "平移扰动大小: " << dis(gen) <<std::endl;
+	// std::cout << "平移扰动大小: " << dis(gen) <<std::endl;
 	transform(0, 3) = dis(gen); // X轴平移扰动
 	transform(1, 3) = dis(gen); // Y轴平移扰动
 	transform(2, 3) = dis(gen); // Z轴平移扰动
