@@ -22,33 +22,48 @@ Eigen::Matrix4f generateAnnealingTransformation(double temperature) {
 
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     boost::random::mt19937 gen(seed);
-		double tras_scale = 0.15;
-		double rot_scale = 0.17* M_PI;
+    double tras_scale = 0.15;
+    double rot_scale = 0.17 * M_PI;
     boost::random::uniform_real_distribution<> rand_dis(0, 1);
-		double randNum = ((double)rand() / RAND_MAX);
-		if (rand_dis(gen) > randNum && temperature<=0.1)
-		{
-			tras_scale *=  1.2;
-			rot_scale  *=  1.7;
-		}
 
-    boost::random::uniform_real_distribution<> dis(-tras_scale*temperature, tras_scale*temperature);
-    boost::random::uniform_real_distribution<> angle_dis(-rot_scale*temperature, rot_scale*temperature);
+    boost::random::uniform_real_distribution<> dis(-tras_scale * temperature, tras_scale * temperature);
+    boost::random::uniform_real_distribution<> angle_dis(-rot_scale * temperature, rot_scale * temperature);
 
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
-    transform(0, 3) = dis(gen); // X轴平移扰动
-    transform(1, 3) = dis(gen); // Y轴平移扰动
-    transform(2, 3) = dis(gen); // Z轴平移扰动
+    transform(0, 3) = dis(gen); // X-axis translation disturbance
+    transform(1, 3) = dis(gen); // Y-axis translation disturbance
+    transform(2, 3) = dis(gen); // Z-axis translation disturbance
 
-    // 绕Z轴旋转扰动
-    float angle = angle_dis(gen);
-    transform(0, 0) = cos(angle);
-    transform(0, 1) = -sin(angle);
-    transform(1, 0) = sin(angle);
-    transform(1, 1) = cos(angle);
+    // Rotation disturbance around Z-axis
+    float angleZ = angle_dis(gen);
+    Eigen::Matrix4f rotZ = Eigen::Matrix4f::Identity();
+    rotZ(0, 0) = cos(angleZ);
+    rotZ(0, 1) = -sin(angleZ);
+    rotZ(1, 0) = sin(angleZ);
+    rotZ(1, 1) = cos(angleZ);
+
+    // Rotation disturbance around Y-axis
+    float angleY = angle_dis(gen);
+    Eigen::Matrix4f rotY = Eigen::Matrix4f::Identity();
+    rotY(0, 0) = cos(angleY);
+    rotY(0, 2) = sin(angleY);
+    rotY(2, 0) = -sin(angleY);
+    rotY(2, 2) = cos(angleY);
+
+    // Rotation disturbance around X-axis
+    float angleX = angle_dis(gen);
+    Eigen::Matrix4f rotX = Eigen::Matrix4f::Identity();
+    rotX(1, 1) = cos(angleX);
+    rotX(1, 2) = -sin(angleX);
+    rotX(2, 1) = sin(angleX);
+    rotX(2, 2) = cos(angleX);
+
+    // Combine the transformations
+    transform = transform * rotZ * rotY * rotX;
 
     return transform;
 }
+
 
 Eigen::Matrix4f generateRandomTransformation() {
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -61,12 +76,33 @@ Eigen::Matrix4f generateRandomTransformation() {
 	transform(1, 3) = dis(gen); // Y轴平移
 	transform(2, 3) = dis(gen); // Z轴平移
 
-	// 绕Z轴旋转
-	float angle = angle_dis(gen);
-	transform(0, 0) = cos(angle);
-	transform(0, 1) = -sin(angle);
-	transform(1, 0) = sin(angle);
-	transform(1, 1) = cos(angle);
+	// Rotation disturbance around Z-axis
+	float angleZ = angle_dis(gen);
+	Eigen::Matrix4f rotZ = Eigen::Matrix4f::Identity();
+	rotZ(0, 0) = cos(angleZ);
+	rotZ(0, 1) = -sin(angleZ);
+	rotZ(1, 0) = sin(angleZ);
+	rotZ(1, 1) = cos(angleZ);
+
+	// Rotation disturbance around Y-axis
+	float angleY = angle_dis(gen);
+	Eigen::Matrix4f rotY = Eigen::Matrix4f::Identity();
+	rotY(0, 0) = cos(angleY);
+	rotY(0, 2) = sin(angleY);
+	rotY(2, 0) = -sin(angleY);
+	rotY(2, 2) = cos(angleY);
+
+	// Rotation disturbance around X-axis
+	float angleX = angle_dis(gen);
+	Eigen::Matrix4f rotX = Eigen::Matrix4f::Identity();
+	rotX(1, 1) = cos(angleX);
+	rotX(1, 2) = -sin(angleX);
+	rotX(2, 1) = sin(angleX);
+	rotX(2, 2) = cos(angleX);
+
+	// Combine the transformations
+	transform = transform * rotZ * rotY * rotX;
+	
 	return transform;
 }
 
@@ -149,22 +185,6 @@ Eigen::Matrix4f readMatrixFromFile(const std::string& filepath) {
 
     return matrix;
 }
-// Eigen::Matrix4f generateCloseTransformation(const Eigen::Matrix4f &original) {
-// 	// 单位 [m]
-// 	Eigen::Matrix4f closeTransform = original;
-// 	closeTransform(0, 3) += 0.05; // X轴微调
-// 	closeTransform(1, 3) += 0.05; // Y轴微调
-// 	closeTransform(2, 3) += 0.05; // Z轴微调
-// 	// 单位 [rad]
-// 	Eigen::Matrix3f rotation = closeTransform.block<3, 3>(0, 0);
-// 	Eigen::AngleAxisf rotationX(0.05, Eigen::Vector3f::UnitX());
-// 	Eigen::AngleAxisf rotationY(0.05, Eigen::Vector3f::UnitY());
-// 	Eigen::AngleAxisf rotationZ(0.05, Eigen::Vector3f::UnitZ());
-// 	rotation *= (rotationX * rotationY * rotationZ).matrix();
-// 	closeTransform.block<3, 3>(0, 0) = rotation;
-// 	return closeTransform;
-// }
-
 
 int main() {
 	// 配置退火时的随机数种子
@@ -193,20 +213,6 @@ int main() {
 	voxel_grid.setLeafSize(0.07f, 0.07f, 0.07f);  // 设置体素大小
 	voxel_grid.filter(*cloud_filtered);
 
-	// // 移除统计离群值
-	// pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
-	// sor.setInputCloud(cloud_filtered);
-	// sor.setMeanK(24);
-	// sor.setStddevMulThresh(1.0);
-	// sor.filter(*cloud_filtered);
-
-	// // 移除半径离群值
-	// pcl::RadiusOutlierRemoval<pcl::PointXYZ> ror;
-	// ror.setInputCloud(cloud_filtered);
-	// ror.setRadiusSearch(0.5);
-	// ror.setMinNeighborsInRadius(4);
-	// ror.filter(*cloud_filtered);
-
 	// 模拟退火参数
 	double temperature = 5.2; // 初始温度
 	double coolingRate = 0.985; // 冷却率
@@ -219,14 +225,11 @@ int main() {
 	std::cout << "Base Transformation Matrix:\n" << base_transformation << std::endl;
 	saveTransformation(base_transformation, "/home/smile/Desktop/github/src/pointcloud-processing-visualization/saicp/result.txt");
 
-	// 生成接近的变换作为先验位姿
-	// Eigen::Matrix4f normal_pose = generateCloseTransformation(base_transformation);
-
 	// 应用初始变换
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::transformPointCloud(*cloud_filtered, *cloud_transformed, base_transformation);
 
-	// 设置ICP实例
+	// 设置SAICP实例
 	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> saicp, normal_icp;
 	saicp.setInputSource(cloud_transformed);
 	saicp.setInputTarget(cloud_filtered);
@@ -237,18 +240,18 @@ int main() {
 	normal_icp.setMaximumIterations(1);
 
 	// 初始化可视化
-	pcl::visualization::PCLVisualizer viewer("ICP demo");
+	pcl::visualization::PCLVisualizer viewer("SAICP demo");
 	viewer.setBackgroundColor(0, 0, 0);
 	viewer.addPointCloud<pcl::PointXYZ>(cloud_filtered, "cloud_filtered");
 	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_filtered");
 	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "cloud_filtered");
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_saicp(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp_normal(new pcl::PointCloud<pcl::PointXYZ>(*cloud_transformed));
 
-	viewer.addPointCloud<pcl::PointXYZ>(cloud_icp, "cloud_icp");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_icp");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 1.0, 0.0, "cloud_icp");
+	viewer.addPointCloud<pcl::PointXYZ>(cloud_saicp, "cloud_saicp");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_saicp");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 1.0, 0.0, "cloud_saicp");
 
 	viewer.addPointCloud<pcl::PointXYZ>(cloud_icp_normal, "cloud_icp_normal");
 	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_icp_normal");
@@ -289,18 +292,18 @@ int main() {
 				std::cout << "迭代次数比率: " << (saicp_cnt-normal_icp_cnt)/normal_icp_cnt <<std::endl;
 				std::cout << "分数差比率: " << std::abs((icp_score-icp_normal_score))/icp_normal_score <<std::endl;
 				std::cout << "差值接收率: " << double(bad_value_accetp_cnt)/double(saicp_cnt) <<std::endl;
-				has_published = true;
 				std::cout << "[SAICP]变换矩阵 " << std::endl;
 				std::cout << saicp.getFinalTransformation() << std::endl;
 				std::cout << "[SAICP]误差 " << std::endl;
 				Eigen::Matrix4f result = readMatrixFromFile("/home/smile/Desktop/github/src/pointcloud-processing-visualization/saicp/result.txt");
 				std::cout << CalculateTransformationError(saicp.getFinalTransformation(),result) <<std::endl;
 				std::cout << "-----------------------------------------------------------" << std::endl;
-				std::cout << "[ICP]变换矩阵 " <<std::endl;
+				std::cout << "[SAICP]变换矩阵 " <<std::endl;
 				std::cout << normal_icp.getFinalTransformation() << std::endl;
-				std::cout << "[ICP]误差 " << std::endl;
+				std::cout << "[SAICP]误差 " << std::endl;
 				std::cout << CalculateTransformationError(normal_icp.getFinalTransformation(),result) <<std::endl;
 				std::cout << "-----------------------------------------------------------" << std::endl;
+				has_published = true;
 			}
 			continue;
 		}
@@ -334,10 +337,9 @@ int main() {
 						saicp_result = new_icp_result; // 接受更好的变换
 						last_fitness_score = new_fitness_score; // 更新最新的fitness score
 					} 
-					else if (exp((-(last_fitness_score - new_fitness_score)) / temperature) > ((double)rand() / RAND_MAX))
+					else if (exp((-(new_fitness_score - last_fitness_score)) / temperature) > ((double)rand() / RAND_MAX))
 					{
 						bad_value_accetp_cnt++;	
-						// std::cout << "接受差值: "  << bad_value_accetp_cnt << std::endl;
 						saicp_result = perturbed_transformation; // 以一定概率接受较差的变换
 						last_fitness_score = new_fitness_score; // 更新fitness score，即使它变差了
 					}
@@ -355,7 +357,7 @@ int main() {
 					// 获取最新一次的变换, 并将该变换应用到带先验的点云上, 更新该点云
 					base_transformation = saicp.getFinalTransformation().cast<float>();
 					pcl::transformPointCloud(*cloud_transformed, *saicp_cloud, base_transformation);
-					viewer.updatePointCloud<pcl::PointXYZ>(saicp_cloud, "cloud_icp");
+					viewer.updatePointCloud<pcl::PointXYZ>(saicp_cloud, "cloud_saicp");
 					//真正的停止条件(收敛条件)
 					if(fitness_score<=0.001)
 					{
@@ -368,7 +370,9 @@ int main() {
 						std::cout << "======================================================="<<std::endl;
 					}     
 				}
-			}       
+			}   
+
+			// 普通icp    
 			if(!normal_icp_fitness_reached)
 			{
 				normal_icp.align(*normal_icp_cloud, normal_icp_result);

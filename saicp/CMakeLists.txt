@@ -16,5 +16,3 @@ add_executable(saicp_example main.cpp)
 # 链接 PCL 库和可能需要的 stdc++fs 库
 target_link_libraries(saicp_example ${PCL_LIBRARIES})
 
-# 对于某些系统和编译器，您可能需要取消注释以下行
-# target_link_libraries(saicp_example stdc++fs)
